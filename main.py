@@ -3,6 +3,7 @@ import cv2
 import mediapipe as mp
 import threading
 import time
+import math
 
 def shift_range(old_value, old_min, old_max, new_min, new_max):
     return ((old_value - old_min) / (old_max - old_min)) * (new_max - new_min) + new_min
@@ -35,14 +36,41 @@ lock = threading.Lock()
 arm.set_position(x=250, y=0, z=120, wait=True)
 # arm.set_servo_angle(servo_id=4 ,angle=-90, speed=100, wait=True)
 
+JOINT5_FIXED = math.radians(-90)
+def move_xyz_fix_joint5(x, y, z, 
+                        roll=0, pitch=math.radians(-90), yaw=math.radians(180),
+                        speed=100):
+    # 1) Forțează joint 5 la 90°
+    ret = arm.set_servo_angle(
+        servo_id=5,               # servo_id=5 corespunde joint 5
+        angle=JOINT5_FIXED,       # unghi în radiani
+        speed=speed,
+        wait=True
+    )
+    if ret != 0:
+        print(f"❌ Eroare la set_servo_angle joint5 (cod {ret})")
+        return
 
+    # 2) Mută doar TCP-ul pe X, Y, Z, menținând orientarea dată
+    ret = arm.set_position(
+        x=x+20, y=y, z=z+15,
+        roll=roll, pitch=pitch, yaw=yaw,
+        speed=speed,
+        wait=True
+    )
+    if ret != 0:
+        print(f"❌ Eroare la set_position (cod {ret})")
+    else:
+        print(f"✅ Moved to X={x:.1f}, Y={y:.1f}, Z={z:.1f} with joint5≈90°")
 def arm_mover():
     while True:
         with lock:
             x = latest_position["x"]
             y = latest_position["y"]
             z = latest_position["z"]
-        arm.set_position(x=x, y=y, z=z, wait=True)
+            
+        arm.set_position(x=x, y=-y, z=z, wait=True)
+        # move_xyz_fix_joint5(x, -y, z)
         time.sleep(0.1)
 
 threading.Thread(target=arm_mover, daemon=True).start()
